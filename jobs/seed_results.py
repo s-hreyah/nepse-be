@@ -17,11 +17,17 @@ RESULTS = [
      "Right 47.5% of the time. Error 3.2% worse than 'no change', better on only 6 of 30 stocks.",
      "Always guessing down: 57.8%", "No skill. The order was not tuned."),
     ("Direction of tomorrow's move", "Gradient boosting",
-     "Right 54.2% of the time. Error 2.1% worse than 'no change'.",
-     "Always guessing down: 58.1%", "No skill. No evidence of skill"),
-    ("Direction of tomorrow's move", "Gradient boosting",
      "Right 54.7% of the time. Error 1.3% worse than 'no change'. Better than 'no change' in 5 of 11 time blocks, but clearly so in only one.",
-     "Always guessing down: 58.3%", "No skill on this test."),
+     "Always guessing down: 58.3%", "No evidence of skill."),
+    ("Direction of tomorrow's move", "Candlestick patterns",
+     "Counted per day, the next day was up on 47% to 50% of days after the marubozu patterns, against 48.0% on all days.",
+     "All days: 48.0%", "No evidence of skill. Per-stock z-scores up to 3.0 disappeared when counted per day."),
+    ("Size of the move over the next days", "Volatility band, 5 / 10 / 20 days",
+     "An 80% band held 81.8%, 80.9% and 88.5% of real moves at 5, 10 and 20 days, on the half of the data it was not fitted on.",
+     "Target 80%", "Usable as a rough guide. At 20 days the band is wider than needed."),
+    ("Direction over the next days", "Past 20-day return vs next 10-day return",
+     "Correlation -0.11 across 201 overlapping days, which is about 20 independent windows.",
+     "No relationship: 0", "No evidence of skill."),
 ]
 
 

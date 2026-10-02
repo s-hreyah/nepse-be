@@ -265,3 +265,56 @@ def forecast_evidence():
     except Exception:
         results, setup = [], []
     return {"setup": setup[0]["value"] if setup else "", "results": results}
+
+RANGE_K = {5: 1.74, 10: 1.75, 20: 1.91}   # fitted on the first half, see jobs/forecast_horizon.py
+
+
+@app.get("/stocks/{symbol}/range")
+def stock_range(symbol: str):
+    symbol = symbol.upper()
+    data = rows("SELECT trade_date, close, adj_close FROM prices "
+                "WHERE symbol = ? AND volume > 0 AND adj_close > 0 ORDER BY trade_date", (symbol,))
+    if not data:
+        raise HTTPException(404, f"No price history for {symbol}")
+    if len(data) < 100:
+        return {"symbol": symbol, "available": False,
+                "reason": f"Only {len(data)} trading days, too thin for a range."}
+    df = pd.DataFrame(data)
+    m20 = float((df["adj_close"].pct_change() * 100).abs().tail(20).mean())
+    last = float(df["close"].iloc[-1])
+    out = []
+    for h, k in RANGE_K.items():
+        half = k * m20 * (h ** 0.5)
+        out.append({"days": h, "plus_minus_pct": round(half, 1),
+                    "low": round(last * (1 - half / 100), 2),
+                    "high": round(last * (1 + half / 100), 2)})
+
+    ev = rows("SELECT book_close, cash_pct, bonus_pct FROM corporate_actions "
+              "WHERE symbol = ? AND book_close > ? AND book_close <= date(?, '+30 days') "
+              "AND (COALESCE(cash_pct, 0) > 0 OR COALESCE(bonus_pct, 0) > 0) "
+              "ORDER BY book_close LIMIT 1", (symbol, df["trade_date"].iloc[-1], df["trade_date"].iloc[-1]))
+    event = None
+    if ev:
+        b, c = (ev[0]["bonus_pct"] or 0), (ev[0]["cash_pct"] or 0)
+        expected = ((last / (1 + b / 100) - c) / last - 1) * 100
+        event = {**ev[0], "expected_drop_pct": round(expected, 1)}
+    return {"symbol": symbol, "available": True, "last_close": last,
+            "as_of": df["trade_date"].iloc[-1], "avg_daily_move_pct": round(m20, 2),
+            "ranges": out, "event": event}
+
+@app.get("/events/upcoming")
+def upcoming_events(days: int = Query(30, le=120)):
+    today = latest_date()
+    data = rows(
+        "SELECT a.symbol, p.name, c.sector, a.book_close, a.agm_date, a.cash_pct, "
+        "a.bonus_pct, a.added_date "
+        "FROM corporate_actions a "
+        "LEFT JOIN companies c ON c.symbol = a.symbol "
+        "LEFT JOIN prices p ON p.symbol = a.symbol AND p.trade_date = ? "
+        "WHERE a.book_close >= ? AND a.book_close <= date(?, '+' || ? || ' days') "
+        "AND (COALESCE(a.cash_pct, 0) > 0 OR COALESCE(a.bonus_pct, 0) > 0) "
+        "ORDER BY a.book_close, a.symbol", (today, today, today, days))
+    for r in data:
+        b = r["bonus_pct"] or 0
+        r["bonus_price_effect_pct"] = round(-b / (100 + b) * 100, 2) if b else 0
+    return {"from": today, "days": days, "events": data}
