@@ -1,8 +1,8 @@
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.db import get_connection
-import pandas as pd 
+import pandas as pd
 
 app = FastAPI(title="NEPSE Monitor API")
 app.add_middleware(
@@ -100,3 +100,38 @@ def stock_history(symbol: str, days: int = Query(250, le=400)):
         "company": info[0] if info else None,
         "points": df.to_dict("records"),
     }
+
+BROAD_IDS = {57, 58, 62, 63}
+
+
+@app.get("/indices")
+def indices():
+    data = rows(
+        "SELECT index_id, name, trade_date, close, prev_close, "
+        "ROUND((close - prev_close) / prev_close * 100, 2) AS pct_change FROM ("
+        "  SELECT index_id, name, trade_date, close, "
+        "  LAG(close) OVER (PARTITION BY index_id ORDER BY trade_date) AS prev_close "
+        "  FROM indices) "
+        "WHERE trade_date = (SELECT MAX(trade_date) FROM indices) "
+        "ORDER BY index_id")
+    for r in data:
+        r["group"] = "broad" if r["index_id"] in BROAD_IDS else "sector"
+    return {"date": data[0]["trade_date"] if data else None, "indices": data}
+
+
+@app.get("/indices/{index_id}/history")
+def index_history(index_id: int, days: int = Query(250, le=400)):
+    data = rows(
+        "SELECT trade_date, open, high, low, close, turnover, volume "
+        "FROM indices WHERE index_id = ? ORDER BY trade_date", (index_id,))
+    if not data:
+        raise HTTPException(404, f"No history for index {index_id}")
+    name = rows("SELECT name FROM indices WHERE index_id = ? LIMIT 1", (index_id,))[0]["name"]
+
+    df = pd.DataFrame(data)
+    df["ma20"] = df["close"].rolling(20).mean()
+    df["ma50"] = df["close"].rolling(50).mean()
+    df["return_pct"] = df["close"].pct_change() * 100
+    df = df.tail(days).round(2).astype(object)
+    df = df.where(df.notna(), None)
+    return {"index_id": index_id, "name": name, "points": df.to_dict("records")}
