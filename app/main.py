@@ -91,6 +91,9 @@ def stock_history(symbol: str, days: int = Query(250, le=400)):
     df["ma20"] = df["adj_close"].rolling(20).mean()
     df["ma50"] = df["adj_close"].rolling(50).mean()
     df["return_pct"] = df["adj_close"].pct_change() * 100
+    factor = df["adj_close"] / df["close"].where(df["close"] > 0)
+    for col in ("open", "high", "low"):
+        df[f"adj_{col}"] = df[col] * factor
     df = df.tail(days).round(2).astype(object)
     df = df.where(df.notna(), None)
 
