@@ -2,6 +2,7 @@ from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.db import get_connection
+import pandas as pd 
 
 app = FastAPI(title="NEPSE Monitor API")
 app.add_middleware(
@@ -75,3 +76,27 @@ def stocks(q: str = "", date: str = "", sector: str = "", kind: str = "Equity",
 def sectors():
     return rows("SELECT sector, COUNT(*) AS companies FROM companies "
                 "WHERE instrument_type = 'Equity' GROUP BY sector ORDER BY companies DESC")
+
+@app.get("/stocks/{symbol}/history")
+def stock_history(symbol: str, days: int = Query(250, le=400)):
+    symbol = symbol.upper()
+    data = rows(
+        "SELECT trade_date, open, high, low, close, adj_close, volume, turnover "
+        "FROM prices WHERE symbol = ? ORDER BY trade_date", (symbol,))
+    if not data:
+        raise HTTPException(404, f"No price history for {symbol}")
+
+    df = pd.DataFrame(data)
+    # averages are computed on the full history, then we cut to the last N days
+    df["ma20"] = df["adj_close"].rolling(20).mean()
+    df["ma50"] = df["adj_close"].rolling(50).mean()
+    df["return_pct"] = df["adj_close"].pct_change() * 100
+    df = df.tail(days).round(2).astype(object)
+    df = df.where(df.notna(), None)
+
+    info = rows("SELECT name, sector, instrument_type FROM companies WHERE symbol = ?", (symbol,))
+    return {
+        "symbol": symbol,
+        "company": info[0] if info else None,
+        "points": df.to_dict("records"),
+    }
