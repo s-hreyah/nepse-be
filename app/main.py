@@ -135,3 +135,46 @@ def index_history(index_id: int, days: int = Query(250, le=400)):
     df = df.tail(days).round(2).astype(object)
     df = df.where(df.notna(), None)
     return {"index_id": index_id, "name": name, "points": df.to_dict("records")}
+
+def init_watchlist():
+    conn = get_connection()
+    conn.execute("CREATE TABLE IF NOT EXISTS watchlist "
+                 "(symbol TEXT PRIMARY KEY, added_at TEXT DEFAULT CURRENT_TIMESTAMP)")
+    conn.commit()
+    conn.close()
+
+
+init_watchlist()
+
+
+@app.get("/watchlist")
+def watchlist():
+    d = latest_date()
+    items = rows(
+        "SELECT w.symbol, p.name, c.sector, p.close, p.pct_change, p.volume, p.turnover "
+        "FROM watchlist w "
+        "LEFT JOIN prices p ON p.symbol = w.symbol AND p.trade_date = ? "
+        "LEFT JOIN companies c ON c.symbol = w.symbol "
+        "ORDER BY w.added_at", (d,))
+    return {"date": d, "items": items}
+
+
+@app.post("/watchlist/{symbol}")
+def watch_add(symbol: str):
+    symbol = symbol.upper()
+    if not rows("SELECT 1 AS x FROM companies WHERE symbol = ?", (symbol,)):
+        raise HTTPException(404, f"Unknown symbol {symbol}")
+    conn = get_connection()
+    conn.execute("INSERT OR IGNORE INTO watchlist (symbol) VALUES (?)", (symbol,))
+    conn.commit()
+    conn.close()
+    return {"ok": True, "symbol": symbol}
+
+
+@app.delete("/watchlist/{symbol}")
+def watch_remove(symbol: str):
+    conn = get_connection()
+    conn.execute("DELETE FROM watchlist WHERE symbol = ?", (symbol.upper(),))
+    conn.commit()
+    conn.close()
+    return {"ok": True, "symbol": symbol.upper()}
