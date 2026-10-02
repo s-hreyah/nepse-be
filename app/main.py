@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-
+from app.patterns import detect, RULES
+from app.lessons import LESSONS
 from app.db import get_connection
 import pandas as pd
 
@@ -181,3 +182,38 @@ def watch_remove(symbol: str):
     conn.commit()
     conn.close()
     return {"ok": True, "symbol": symbol.upper()}
+
+MARKED = ["hammer", "shooting_star", "bull_engulfing", "bear_engulfing",
+          "morning_star", "evening_star"]   # doji and marubozu are too common to mark
+
+
+@app.get("/patterns/lessons")
+def pattern_lessons():
+    try:
+        stats = {r["pattern"]: r for r in rows("SELECT * FROM pattern_stats")}
+    except Exception:
+        stats = {}
+    lessons = [{"key": k, "rule": RULES[k], **LESSONS[k], "stats": stats.get(k)} for k in RULES]
+    return {"base": stats.get("all_days"), "lessons": lessons}
+
+
+@app.get("/stocks/{symbol}/patterns")
+def stock_patterns(symbol: str, days: int = Query(250, le=400)):
+    symbol = symbol.upper()
+    data = rows("SELECT trade_date, open, high, low, close, adj_close, volume "
+                "FROM prices WHERE symbol = ? ORDER BY trade_date", (symbol,))
+    if not data:
+        raise HTTPException(404, f"No price history for {symbol}")
+    df = pd.DataFrame(data)
+    f = df["adj_close"] / df["close"].where(df["close"] > 0)
+    for col in ("open", "high", "low"):
+        df[f"adj_{col}"] = df[col] * f
+    df = df[df["volume"] > 0].reset_index(drop=True)
+    sig = detect(df)
+    cutoff = df["trade_date"].iloc[-days:].min()
+    found = []
+    for i in range(len(df)):
+        names = [k for k in MARKED if sig.at[i, k]]
+        if names and df.at[i, "trade_date"] >= cutoff:
+            found.append({"trade_date": df.at[i, "trade_date"], "patterns": names})
+    return {"symbol": symbol, "found": found}
