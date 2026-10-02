@@ -256,3 +256,12 @@ def stock_forecast(symbol: str):
         "method": "1.5 x the 20-day average absolute move",
         "tested_coverage_pct": 77.6,
     }
+
+@app.get("/forecast/evidence")
+def forecast_evidence():
+    try:
+        results = rows("SELECT question, method, result, benchmark, verdict FROM forecast_results ORDER BY id")
+        setup = rows("SELECT value FROM meta WHERE key = 'forecast_setup'")
+    except Exception:
+        results, setup = [], []
+    return {"setup": setup[0]["value"] if setup else "", "results": results}

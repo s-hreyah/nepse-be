@@ -32,13 +32,15 @@ def init_prices():
 
 
 def fetch(date_str):
-    for _ in range(3):
-        rows = Nepse().get_today_price(date=date_str)   # fresh session each try
-        if rows:
-            return rows
-        time.sleep(10)
+    for attempt in range(4):
+        try:
+            rows = Nepse().get_today_price(date=date_str)   # fresh session each try
+            if rows:
+                return rows
+        except Exception as ex:
+            print(f"attempt {attempt + 1} failed: {ex.__class__.__name__}")
+        time.sleep(30)
     return []
-
 
 def run(date_str=None):
     init_prices()
