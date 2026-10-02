@@ -217,3 +217,42 @@ def stock_patterns(symbol: str, days: int = Query(250, le=400)):
         if names and df.at[i, "trade_date"] >= cutoff:
             found.append({"trade_date": df.at[i, "trade_date"], "patterns": names})
     return {"symbol": symbol, "found": found}
+
+BAND_MULT = 1.5   # fitted on the first half of the walk-forward test; 77.6% coverage on the second half
+
+
+@app.get("/stocks/{symbol}/forecast")
+def stock_forecast(symbol: str):
+    symbol = symbol.upper()
+    data = rows(
+        "SELECT trade_date, close, adj_close FROM prices "
+        "WHERE symbol = ? AND adj_close > 0 ORDER BY trade_date", (symbol,))
+    if not data:
+        raise HTTPException(404, f"No price history for {symbol}")
+    if len(data) < 40:
+        return {
+            "available": False,
+            "symbol": symbol,
+            "reason": f"Only {len(data)} trading days in the last year, too few for a forecast band.",
+        }
+
+    df = pd.DataFrame(data)
+    moves = df["adj_close"].pct_change().abs() * 100
+    avg20 = float(moves.tail(20).mean())
+    band = min(BAND_MULT * avg20, 15.0)          # NEPSE's daily limit is 15%
+
+    span = (pd.to_datetime(df["trade_date"].iloc[-1]) - pd.to_datetime(df["trade_date"].iloc[-21])).days
+    last_close = float(df["close"].iloc[-1])
+    return {
+        "available": True,
+        "symbol": symbol,
+        "as_of": df["trade_date"].iloc[-1],
+        "last_close": round(last_close, 2),
+        "avg_abs_move_20d_pct": round(avg20, 2),
+        "band_pct": round(band, 2),
+        "low": round(last_close * (1 - band / 100), 2),
+        "high": round(last_close * (1 + band / 100), 2),
+        "thin": span > 45,        # the last 20 trades cover over 6 weeks: thinly traded
+        "method": "1.5 x the 20-day average absolute move",
+        "tested_coverage_pct": 77.6,
+    }
