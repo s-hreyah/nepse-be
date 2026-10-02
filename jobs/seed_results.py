@@ -18,10 +18,10 @@ RESULTS = [
      "Always guessing down: 57.8%", "No skill. The order was not tuned."),
     ("Direction of tomorrow's move", "Gradient boosting",
      "Right 54.2% of the time. Error 2.1% worse than 'no change'.",
-     "Always guessing down: 58.1%", "No skill. Figures from my earlier notes."),
-    ("Direction of tomorrow's move", "Candlestick patterns",
-     "An apparent effect disappeared when patterns were counted per stock instead of per day.",
-     "Base rate of up and down days", "No evidence of skill. Figures from my earlier notes."),
+     "Always guessing down: 58.1%", "No skill. No evidence of skill"),
+    ("Direction of tomorrow's move", "Gradient boosting",
+     "Right 54.7% of the time. Error 1.3% worse than 'no change'. Better than 'no change' in 5 of 11 time blocks, but clearly so in only one.",
+     "Always guessing down: 58.3%", "No skill on this test."),
 ]
 
 
