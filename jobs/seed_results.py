@@ -28,6 +28,10 @@ RESULTS = [
     ("Direction over the next days", "Past 20-day return vs next 10-day return",
      "Correlation -0.11 across 201 overlapping days, which is about 20 independent windows.",
      "No relationship: 0", "No evidence of skill."),
+    ("Direction of tomorrow's move", "Relative momentum, 5 to 20 days (about 5 years)",
+     "Winners over the past window beat the market again 47.7%, 48.0% and 49.1% of the time at 5, 10 and 20 days.",
+     "50% (no skill, market effect removed)",
+     "No usable edge. A faint 5-day reversal exists (-0.04 correlation) but is too small to act on."),
 ]
 
 
